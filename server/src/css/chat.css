@@ -1,5 +1,6 @@
 :root {
     interpolate-size: allow-keywords;
+    font-size: 18px;
     --client-color: #245B47;
     --server-color: #224942;
 }

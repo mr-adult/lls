@@ -1,14 +1,24 @@
+use std::collections::HashSet;
+
 use lsp_server::Message;
 
 use crate::{
-    message::Conversation,
-    session::{MessageSource},
+    message::{Conversation, MessageKind, classify},
+    session::MessageSource,
 };
 
-pub(crate) fn append_chat_html_to(html: &mut String, conversation: &Conversation) {
+pub(crate) fn append_chat_html_to(
+    html: &mut String,
+    conversation: &Conversation,
+    allow_list: &HashSet<Option<MessageKind>>,
+) {
     html.push_str("<div id=\"chat\">");
     {
         for message_with_time_stamp in conversation {
+            if !allow_list.contains(&classify(&message_with_time_stamp.message, conversation)) {
+                continue;
+            }
+
             let source = crate::message::get_source(&message_with_time_stamp.message, conversation);
             let message = &message_with_time_stamp.message;
 

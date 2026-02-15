@@ -41,6 +41,10 @@ pub(crate) struct Conversation {
 }
 
 impl Conversation {
+    pub(crate) fn messages(&self) -> &[MessageWithTimeStamp] {
+        &self.messages
+    }
+
     pub(crate) fn requests(&self) -> &HashMap<RequestId, Request> {
         &self.requests
     }
@@ -163,31 +167,34 @@ pub(crate) fn get_source(
             })
             .flatten(),
         Message::Notification(notification) => match notification.method.as_str() {
-            Cancel::METHOD => {
-                serde_json::from_value::<CancelParams>(notification.params.clone())
-                    .ok()
-                    .map(|cancel_params| {
-                        let request_id = match cancel_params.id {
-                            NumberOrString::Number(num) => RequestId::from(num),
-                            NumberOrString::String(str) => RequestId::from(str),
-                        };
+            Cancel::METHOD => serde_json::from_value::<CancelParams>(notification.params.clone())
+                .ok()
+                .map(|cancel_params| {
+                    let request_id = match cancel_params.id {
+                        NumberOrString::Number(num) => RequestId::from(num),
+                        NumberOrString::String(str) => RequestId::from(str),
+                    };
 
-                        containing_conversation.requests.get(&request_id).cloned()
+                    containing_conversation.requests.get(&request_id).cloned()
+                })
+                .flatten()
+                .as_ref()
+                .map(get_request_source)
+                .flatten(),
+            Progress::METHOD => {
+                serde_json::from_value::<ProgressParams>(notification.params.clone())
+                    .ok()
+                    .map(|progress_params| {
+                        containing_conversation
+                            .progress_tokens
+                            .get(&progress_params.token)
+                            .map(get_request_source)
+                            .flatten()
+                            .as_ref()
+                            .map(MessageSource::other)
                     })
                     .flatten()
-                    .as_ref()
-                    .map(get_request_source)
-                    .flatten()
             }
-            Progress::METHOD => serde_json::from_value::<ProgressParams>(notification.params.clone())
-                .ok()
-                .map(|progress_params| containing_conversation.progress_tokens
-                    .get(&progress_params.token)
-                    .map(get_request_source)
-                    .flatten()
-                    .as_ref()
-                    .map(MessageSource::other))
-                .flatten(),
             SetTrace::METHOD => Some(MessageSource::Client),
             LogTrace::METHOD => Some(MessageSource::Server),
             Initialized::METHOD => Some(MessageSource::Client),
@@ -286,13 +293,6 @@ fn get_request_source(request: &Request) -> Option<MessageSource> {
     }
 }
 
-pub(crate) fn is_lifecycle(message: &Message, containing_conversation: &Conversation) -> bool {
-    matches!(
-        classify(message, containing_conversation),
-        Some(MessageKind::Lifecycle)
-    )
-}
-
 pub fn classify(message: &Message, containing_conversation: &Conversation) -> Option<MessageKind> {
     match message {
         Message::Request(request) => classify_request(request),
@@ -344,7 +344,9 @@ pub fn classify(message: &Message, containing_conversation: &Conversation) -> Op
                 DidOpenNotebookDocument::METHOD
                 | DidChangeNotebookDocument::METHOD
                 | DidSaveNotebookDocument::METHOD
-                | DidCloseNotebookDocument::METHOD => Some(MessageKind::NotebookDocumentSynchronization),
+                | DidCloseNotebookDocument::METHOD => {
+                    Some(MessageKind::NotebookDocumentSynchronization)
+                }
                 DidChangeConfiguration::METHOD
                 | DidChangeWorkspaceFolders::METHOD
                 | DidCreateFiles::METHOD
@@ -381,40 +383,41 @@ fn classify_request(request: &Request) -> Option<MessageKind> {
         | TypeHierarchySupertypes::METHOD
         | TypeHierarchySubtypes::METHOD => Some(MessageKind::TypeHierarchy),
         DocumentHighlightRequest::METHOD => Some(MessageKind::DocumentHighlight),
-        DocumentLinkRequest::METHOD
-        | DocumentLinkResolve::METHOD => Some(MessageKind::DocumentLink),
+        DocumentLinkRequest::METHOD | DocumentLinkResolve::METHOD => {
+            Some(MessageKind::DocumentLink)
+        }
         HoverRequest::METHOD => Some(MessageKind::Hover),
-        CodeLensRequest::METHOD
-        | CodeLensResolve::METHOD => Some(MessageKind::CodeLens),
+        CodeLensRequest::METHOD | CodeLensResolve::METHOD => Some(MessageKind::CodeLens),
         FoldingRangeRequest::METHOD => Some(MessageKind::FoldingRange),
         SelectionRangeRequest::METHOD => Some(MessageKind::Selection),
         DocumentSymbolRequest::METHOD => Some(MessageKind::Symbol),
         SemanticTokensFullRequest::METHOD
         | SemanticTokensFullDeltaRequest::METHOD
         | SemanticTokensRangeRequest::METHOD => Some(MessageKind::SemanticTokens),
-        InlayHintRequest::METHOD
-        | InlayHintResolveRequest::METHOD => Some(MessageKind::InlayHint),
+        InlayHintRequest::METHOD | InlayHintResolveRequest::METHOD => Some(MessageKind::InlayHint),
         InlineValueRequest::METHOD => Some(MessageKind::InlineValue),
         MonikerRequest::METHOD => Some(MessageKind::Moniker),
-        Completion::METHOD
-        | ResolveCompletionItem::METHOD => Some(MessageKind::Completion),
+        Completion::METHOD | ResolveCompletionItem::METHOD => Some(MessageKind::Completion),
         DocumentDiagnosticRequest::METHOD => Some(MessageKind::Diagnostic),
         WorkspaceDiagnosticRequest::METHOD => Some(MessageKind::Diagnostic),
         SignatureHelpRequest::METHOD => Some(MessageKind::SignatureHelp),
-        CodeActionRequest::METHOD
-        | CodeActionResolveRequest::METHOD => Some(MessageKind::CodeAction),
-        DocumentColor::METHOD
-        | ColorPresentationRequest::METHOD => Some(MessageKind::DocumentColor),
-        Formatting::METHOD
-        | RangeFormatting::METHOD
-        | OnTypeFormatting::METHOD => Some(MessageKind::Formatting),
-        Rename::METHOD
-        | PrepareRenameRequest::METHOD => Some(MessageKind::Rename),
+        CodeActionRequest::METHOD | CodeActionResolveRequest::METHOD => {
+            Some(MessageKind::CodeAction)
+        }
+        DocumentColor::METHOD | ColorPresentationRequest::METHOD => {
+            Some(MessageKind::DocumentColor)
+        }
+        Formatting::METHOD | RangeFormatting::METHOD | OnTypeFormatting::METHOD => {
+            Some(MessageKind::Formatting)
+        }
+        Rename::METHOD | PrepareRenameRequest::METHOD => Some(MessageKind::Rename),
         LinkedEditingRange::METHOD => Some(MessageKind::LinkedEditingRange),
-        WorkspaceSymbolRequest::METHOD
-        | WorkspaceSymbolResolve::METHOD => Some(MessageKind::Symbol),
-        WillCreateFiles::METHOD
-        | WillRenameFiles::METHOD => Some(MessageKind::WorkspaceSynchronization),
+        WorkspaceSymbolRequest::METHOD | WorkspaceSymbolResolve::METHOD => {
+            Some(MessageKind::Symbol)
+        }
+        WillCreateFiles::METHOD | WillRenameFiles::METHOD => {
+            Some(MessageKind::WorkspaceSynchronization)
+        }
         ExecuteCommand::METHOD => Some(MessageKind::ExecuteCommand),
         CodeLensRefresh::METHOD => Some(MessageKind::CodeLens),
         SemanticTokensRefresh::METHOD => Some(MessageKind::SemanticTokens),
@@ -422,15 +425,18 @@ fn classify_request(request: &Request) -> Option<MessageKind> {
         InlineValueRefreshRequest::METHOD => Some(MessageKind::InlineValue),
         PublishDiagnostics::METHOD => Some(MessageKind::Diagnostic),
         WorkspaceDiagnosticRefresh::METHOD => Some(MessageKind::Diagnostic),
-        WorkspaceConfiguration::METHOD 
-        | WorkspaceFoldersRequest::METHOD => Some(MessageKind::WorkspaceSynchronization),
+        WorkspaceConfiguration::METHOD | WorkspaceFoldersRequest::METHOD => {
+            Some(MessageKind::WorkspaceSynchronization)
+        }
         ApplyWorkspaceEdit::METHOD => Some(MessageKind::Workspace),
         WorkDoneProgressCreate::METHOD => Some(MessageKind::Lifecycle),
         _ => None,
     }
 }
 
-enum MessageKind {
+#[repr(u8)]
+#[derive(Clone, Copy, Hash, PartialEq, Eq)]
+pub(crate) enum MessageKind {
     Lifecycle,
     TextDocumentSynchronization,
     NotebookDocumentSynchronization,
@@ -464,4 +470,121 @@ enum MessageKind {
     Rename,
     LinkedEditingRange,
     ExecuteCommand,
+}
+
+impl MessageKind {
+    pub(crate) fn all() -> &'static [MessageKind] {
+        &[
+            MessageKind::Lifecycle,
+            MessageKind::TextDocumentSynchronization,
+            MessageKind::NotebookDocumentSynchronization,
+            MessageKind::WorkspaceSynchronization,
+            MessageKind::Workspace,
+            MessageKind::Telemetry,
+            MessageKind::Declaration,
+            MessageKind::Definition,
+            MessageKind::TypeDefinition,
+            MessageKind::Implementation,
+            MessageKind::References,
+            MessageKind::CallHierarchy,
+            MessageKind::TypeHierarchy,
+            MessageKind::DocumentHighlight,
+            MessageKind::DocumentLink,
+            MessageKind::Hover,
+            MessageKind::CodeLens,
+            MessageKind::FoldingRange,
+            MessageKind::Selection,
+            MessageKind::Symbol,
+            MessageKind::SemanticTokens,
+            MessageKind::InlayHint,
+            MessageKind::InlineValue,
+            MessageKind::Moniker,
+            MessageKind::Completion,
+            MessageKind::Diagnostic,
+            MessageKind::SignatureHelp,
+            MessageKind::CodeAction,
+            MessageKind::DocumentColor,
+            MessageKind::Formatting,
+            MessageKind::Rename,
+            MessageKind::LinkedEditingRange,
+            MessageKind::ExecuteCommand,
+        ]
+    }
+
+    pub(crate) fn as_str(&self) -> &'static str {
+        match self {
+            MessageKind::Lifecycle => "life cycle",
+            MessageKind::TextDocumentSynchronization => "document synchronization",
+            MessageKind::NotebookDocumentSynchronization => "notebook synchronization",
+            MessageKind::WorkspaceSynchronization => "workspace synchronization",
+            MessageKind::Workspace => "workspace",
+            MessageKind::Telemetry => "telemetry",
+            MessageKind::Declaration => "declaration",
+            MessageKind::Definition => "definition",
+            MessageKind::TypeDefinition => "type definition",
+            MessageKind::Implementation => "implementation",
+            MessageKind::References => "references",
+            MessageKind::CallHierarchy => "call hierarchy",
+            MessageKind::TypeHierarchy => "type hierarchy",
+            MessageKind::DocumentHighlight => "document highlight",
+            MessageKind::DocumentLink => "document link",
+            MessageKind::Hover => "hover",
+            MessageKind::CodeLens => "code lens",
+            MessageKind::FoldingRange => "folding range",
+            MessageKind::Selection => "selection",
+            MessageKind::Symbol => "symbol",
+            MessageKind::SemanticTokens => "semantic tokens",
+            MessageKind::InlayHint => "inlay hint",
+            MessageKind::InlineValue => "inline value",
+            MessageKind::Moniker => "moniker",
+            MessageKind::Completion => "completion",
+            MessageKind::Diagnostic => "diagnostic",
+            MessageKind::SignatureHelp => "signature help",
+            MessageKind::CodeAction => "code action",
+            MessageKind::DocumentColor => "document color",
+            MessageKind::Formatting => "formatting",
+            MessageKind::Rename => "rename",
+            MessageKind::LinkedEditingRange => "linked editing range",
+            MessageKind::ExecuteCommand => "execute command",
+        }
+    }
+
+    fn try_parse_str(str: &str) -> Option<Self> {
+        match str {
+            "life_cycle" => Some(MessageKind::Lifecycle),
+            "document_synchronization" => Some(MessageKind::TextDocumentSynchronization),
+            "notebook_synchronization" => Some(MessageKind::NotebookDocumentSynchronization),
+            "workspace_synchronization" => Some(MessageKind::WorkspaceSynchronization),
+            "workspace" => Some(MessageKind::Workspace),
+            "telemetry" => Some(MessageKind::Telemetry),
+            "declaration" => Some(MessageKind::Declaration),
+            "definition" => Some(MessageKind::Definition),
+            "type_definition" => Some(MessageKind::TypeDefinition),
+            "implementation" => Some(MessageKind::Implementation),
+            "references" => Some(MessageKind::References),
+            "call_hierarchy" => Some(MessageKind::CallHierarchy),
+            "type_hierarchy" => Some(MessageKind::TypeHierarchy),
+            "document_highlight" => Some(MessageKind::DocumentHighlight),
+            "document_link" => Some(MessageKind::DocumentLink),
+            "hover" => Some(MessageKind::Hover),
+            "code_lens" => Some(MessageKind::CodeLens),
+            "folding_range" => Some(MessageKind::FoldingRange),
+            "selection" => Some(MessageKind::Selection),
+            "symbol" => Some(MessageKind::Symbol),
+            "semantic_tokens" => Some(MessageKind::SemanticTokens),
+            "inlay_hint" => Some(MessageKind::InlayHint),
+            "inline_value" => Some(MessageKind::InlineValue),
+            "moniker" => Some(MessageKind::Moniker),
+            "completion" => Some(MessageKind::Completion),
+            "diagnostic" => Some(MessageKind::Diagnostic),
+            "signature_help" => Some(MessageKind::SignatureHelp),
+            "code_action" => Some(MessageKind::CodeAction),
+            "document_color" => Some(MessageKind::DocumentColor),
+            "formatting" => Some(MessageKind::Formatting),
+            "rename" => Some(MessageKind::Rename),
+            "linked_editing_range" => Some(MessageKind::LinkedEditingRange),
+            "execute_command" => Some(MessageKind::ExecuteCommand),
+            _ => None,
+        }
+    }
 }
