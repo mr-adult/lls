@@ -4,7 +4,7 @@ use axum::{
     response::Html,
 };
 use serde::Deserialize;
-use sqlx::{prelude::FromRow};
+use sqlx::prelude::FromRow;
 use time::OffsetDateTime;
 
 use crate::{AppState, utils::get_iso_string};

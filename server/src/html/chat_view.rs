@@ -4,7 +4,8 @@ use lsp_server::Message;
 
 use crate::{
     message::{Conversation, MessageKind, classify},
-    session::MessageSource, utils::get_iso_string,
+    session::MessageSource,
+    utils::get_iso_string,
 };
 
 pub(crate) fn append_chat_html_to(

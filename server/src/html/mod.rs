@@ -211,7 +211,7 @@ pub(crate) async fn get_session(
     )
     .fetch_one(&state.db)
     .await
-    .map_err(|err|  match err {
+    .map_err(|err| match err {
         sqlx::Error::RowNotFound => StatusCode::NOT_FOUND,
         _ => StatusCode::INTERNAL_SERVER_ERROR,
     })?;

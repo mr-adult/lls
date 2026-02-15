@@ -1,5 +1,6 @@
 use axum::{
-     Router, routing::{any, get}
+    Router,
+    routing::{any, get},
 };
 use sqlx::{PgPool, postgres::PgPoolOptions};
 use tokio::net::TcpListener;
@@ -11,8 +12,8 @@ use tracing_subscriber::{
 use crate::error_logging::PostgresLayer;
 
 mod error_logging;
-mod language_logging;
 mod html;
+mod language_logging;
 mod message;
 mod session;
 mod utils;
