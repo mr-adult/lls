@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use axum::{
     extract::{Query, State},
-    http::StatusCode,
+    http::{HeaderMap, HeaderValue, Response, StatusCode},
     response::Html,
 };
 use serde::Deserialize;
@@ -204,9 +204,9 @@ impl GetSessionParams {
 pub(crate) async fn get_session(
     State(state): State<AppState>,
     Query(request): Query<GetSessionParams>,
-) -> Result<Html<String>, StatusCode> {
-    let _session = sqlx::query!(
-        "SELECT * FROM sessions WHERE id = $1 LIMIT 1;",
+) -> Result<(StatusCode, HeaderMap, Html<String>), StatusCode> {
+    let session = sqlx::query!(
+        "SELECT id, end_time_stamp FROM sessions WHERE id = $1 LIMIT 1;",
         request.session_id
     )
     .fetch_one(&state.db)
@@ -244,7 +244,15 @@ pub(crate) async fn get_session(
     html.push_str("</body>");
     html.push_str("</html>");
 
-    Ok(Html(html))
+    // if the session has been ended, it won't change. Set long-lived caching headers
+    let mut headers = HeaderMap::new();
+    if session.end_time_stamp.is_some() {
+        headers.insert("immutable", HeaderValue::from_str("true").unwrap());
+    } else {
+        headers.insert("no-store", HeaderValue::from_str("true").unwrap());
+    }
+
+    Ok((StatusCode::OK, headers, Html(html)))
 }
 
 fn generate_filtering_form(request: &GetSessionParams, conversation: &Conversation) -> String {
