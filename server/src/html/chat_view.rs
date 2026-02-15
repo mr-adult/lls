@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 
 use lsp_server::Message;
+use serde_json::Value;
 
 use crate::{
     message::{Conversation, MessageKind, classify},
@@ -81,13 +82,12 @@ pub(crate) fn append_chat_html_to(
                         }
 
                         html.push_str("</summary>");
-                        html.push_str("<pre>");
                         {
-                            html.push_str(&html_escape::encode_text(
-                                &serde_json::to_string_pretty(&message).unwrap(),
-                            ));
+                            append_json_html_to(
+                                html,
+                                serde_json::to_value(message.clone()).unwrap(),
+                            );
                         }
-                        html.push_str("</pre>");
                     }
                     html.push_str("</details>");
                 }
@@ -101,4 +101,140 @@ pub(crate) fn append_chat_html_to(
         }
     }
     html.push_str("</div>");
+}
+
+fn append_json_html_to(html: &mut String, value: Value) {
+    match value {
+        Value::Null => {
+            html.push_str("<span style=\"color: lightblue\">null</span>");
+            html.push_str("<br/>");
+        }
+        Value::Bool(value) => {
+            if value {
+                html.push_str("<span style=\"color: lightblue\">true</span>");
+            } else {
+                html.push_str("<span style=\"color: lightblue\">false</span>");
+            }
+            html.push_str("<br/>");
+        }
+        Value::Number(number) => {
+            html.push_str(&number.to_string());
+            html.push_str("<br/>");
+        }
+        Value::String(str) => {
+            html.push('"');
+            html.push_str(&html_escape::encode_text(&str));
+            html.push('"');
+            html.push_str("<br/>");
+        }
+        Value::Array(values) => {
+            if values.is_empty() {
+                html.push_str("[]");
+            } else {
+                html.push_str("<details open class=\"array_container\">");
+                html.push_str("<summary>[]</summary>");
+                html.push_str("<div class=\"array_content\">");
+                for value in values {
+                    append_json_html_to(html, value);
+                }
+                html.push_str("</div>");
+                html.push_str("</details>");
+            }
+        }
+        Value::Object(map) => {
+            if map.is_empty() {
+                html.push_str("{}");
+            } else {
+                html.push_str("<details open class=\"object_container\">");
+                html.push_str("<summary>{}</summary>");
+                html.push_str("<div class=\"object_content\">");
+                for kvp in map {
+                    append_json_kvp_to(html, kvp);
+                }
+                html.push_str("</div>");
+                html.push_str("</details>");
+            }
+        }
+    }
+}
+
+fn append_json_kvp_to(html: &mut String, kvp: (String, Value)) {
+    match kvp.1 {
+        Value::Null => {
+            html.push('"');
+            html.push_str(&html_escape::encode_text(&kvp.0));
+            html.push('"');
+            html.push_str(": ");
+            html.push_str("<span style=\"color: lightblue\">null</span>");
+            html.push_str("<br/>");
+        }
+        Value::Bool(value) => {
+            html.push('"');
+            html.push_str(&html_escape::encode_text(&kvp.0));
+            html.push('"');
+            html.push_str(": ");
+            if value {
+                html.push_str("<span style=\"color: lightblue\">true</span>");
+            } else {
+                html.push_str("<span style=\"color: lightblue\">false</span>");
+            }
+            html.push_str("<br/>");
+        }
+        Value::Number(num) => {
+            html.push('"');
+            html.push_str(&html_escape::encode_text(&kvp.0));
+            html.push('"');
+            html.push_str(": ");
+            html.push_str(&num.to_string());
+            html.push_str("<br/>");
+        }
+        Value::String(str) => {
+            html.push('"');
+            html.push_str(&html_escape::encode_text(&kvp.0));
+            html.push('"');
+            html.push_str(": ");
+            html.push('"');
+            html.push_str(&html_escape::encode_text(&str));
+            html.push('"');
+            html.push_str("<br/>");
+        }
+        Value::Array(values) => {
+            if !values.is_empty() {
+                html.push_str("<details class=\"array_container\">");
+                html.push_str("<summary>");
+            }
+            html.push('"');
+            html.push_str(&html_escape::encode_text(&kvp.0));
+            html.push('"');
+            html.push_str(": []");
+            if !values.is_empty() {
+                html.push_str("</summary>");
+                html.push_str("<div class=\"array_content\">");
+                for value in values {
+                    append_json_html_to(html, value);
+                }
+                html.push_str("</div>");
+                html.push_str("</details>");
+            }
+        }
+        Value::Object(object) => {
+            if !object.is_empty() {
+                html.push_str("<details class=\"object_container\">");
+                html.push_str("<summary>");
+            }
+            html.push('"');
+            html.push_str(&html_escape::encode_text(&kvp.0));
+            html.push('"');
+            html.push_str(": {}");
+            if !object.is_empty() {
+                html.push_str("</summary>");
+                html.push_str("<div class=\"object_content\">");
+                for kvp in object {
+                    append_json_kvp_to(html, kvp);
+                }
+                html.push_str("</div>");
+                html.push_str("</details>");
+            }
+        }
+    }
 }

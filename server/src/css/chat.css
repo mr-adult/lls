@@ -111,3 +111,11 @@ details[open]::details-content {
     block-size: auto;
     overflow: hidden;
 }
+
+.array_content {
+    margin-left: 16px;
+}
+
+.object_content {
+    margin-left: 16px;
+}
