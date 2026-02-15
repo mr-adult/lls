@@ -210,7 +210,10 @@ pub(crate) async fn get_session(
     )
     .fetch_one(&state.db)
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .map_err(|err|  match err {
+        sqlx::Error::RowNotFound => StatusCode::NOT_FOUND,
+        _ => StatusCode::INTERNAL_SERVER_ERROR,
+    })?;
 
     let conversation = crate::session::get_all_messages_for_session_in_chronological_order(
         &state.db,
