@@ -1,0 +1,44 @@
+:root {
+    font-size: 18px;
+}
+
+html {
+    background-color: #192A3C;
+    color: white;
+}
+
+a:link {
+  color: #245B47;
+  background-color: transparent;
+  text-decoration: none;
+}
+
+a:visited {
+  color: gray;
+  background-color: transparent;
+  text-decoration: none;
+}
+
+body {
+    margin-right: auto;
+    margin-left: auto;
+    max-width: 960px;
+}
+
+table, tr, th, td {
+    border: 1px solid black;
+    border-collapse: collapse;
+    width: 100%;
+}
+
+table {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-evenly;
+}
+
+tr {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-around;
+}

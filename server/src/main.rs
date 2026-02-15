@@ -15,6 +15,7 @@ mod language_logging;
 mod html;
 mod message;
 mod session;
+mod utils;
 
 #[derive(Clone)]
 struct AppState {
@@ -59,6 +60,7 @@ pub async fn main() {
         .init();
 
     let router = Router::new()
+        .route("/", get(html::session_search::get_sessions))
         .route("/ws", any(language_logging::handle_ws))
         .route("/session", get(html::get_session))
         // FUTURE: handle regular POST requests. Need to create an API to retrieve a session ID first.

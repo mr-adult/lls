@@ -9,7 +9,8 @@ use axum::{
     },
     http::{Response, StatusCode},
 };
-use lsp_server::Message as LspMessage;
+use lsp_server::{Message as LspMessage, Notification};
+use lsp_types::notification::{Exit, Notification as LspNotification};
 use serde::Deserialize;
 use sqlx::PgPool;
 use time::OffsetDateTime;
@@ -40,11 +41,15 @@ pub(crate) async fn handle_ws(
 }
 
 async fn handle_ws_upgrade(mut socket: WebSocket, state: AppState) {
+    let session_start = OffsetDateTime::now_utc();
+
     // acquire a session from the database
-    let session_id_result =
-        sqlx::query_scalar::<_, i64>("INSERT INTO sessions DEFAULT VALUES RETURNING id;")
-            .fetch_one(&state.db)
-            .await;
+    let session_id_result = sqlx::query_scalar::<_, i64>(
+        "INSERT INTO sessions (start_time_stamp, end_time_stamp) VALUES ($1, NULL) RETURNING id;",
+    )
+    .bind(session_start)
+    .fetch_one(&state.db)
+    .await;
 
     let session_id = match session_id_result {
         Ok(session_id) => session_id,
@@ -60,7 +65,6 @@ async fn handle_ws_upgrade(mut socket: WebSocket, state: AppState) {
     let _session_span_handle = session_span.enter();
 
     while let Some(msg) = socket.recv().await {
-        eprintln!("received message");
         let now = OffsetDateTime::now_utc();
 
         let msg = match msg {
@@ -97,6 +101,18 @@ async fn handle_ws_upgrade(mut socket: WebSocket, state: AppState) {
         };
 
         log_message(&state.db, msg, Some(session_id), now).await;
+    }
+
+    let update = sqlx::query!(
+        "UPDATE sessions SET end_time_stamp = $1 WHERE id = $2",
+        OffsetDateTime::now_utc(),
+        session_id
+    )
+    .fetch_optional(&state.db)
+    .await;
+
+    if let Err(err) = update {
+        error!("Failed to write the end_time_stamp. Message: {}", err);
     }
 }
 
@@ -161,7 +177,7 @@ async fn log_message(
                 error_message = Some(err.message);
                 error_data = err.data;
                 result = None;
-            } else if let Some(res) = resp.result {
+            } else if let Some(res) = &resp.result {
                 is_err = false;
                 error_code = None;
                 error_message = None;

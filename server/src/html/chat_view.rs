@@ -4,7 +4,7 @@ use lsp_server::Message;
 
 use crate::{
     message::{Conversation, MessageKind, classify},
-    session::MessageSource,
+    session::MessageSource, utils::get_iso_string,
 };
 
 pub(crate) fn append_chat_html_to(
@@ -93,17 +93,7 @@ pub(crate) fn append_chat_html_to(
                 html.push_str("</div>");
 
                 html.push_str("<span class=\"timestamp\">");
-                let time_stamp = &message_with_time_stamp.time_stamp;
-                html.push_str(&format!(
-                    "{}/{}/{:04} at {:02}:{:02}:{:02}.{:03}",
-                    time_stamp.month() as i32,
-                    time_stamp.day(),
-                    time_stamp.year(),
-                    time_stamp.hour(),
-                    time_stamp.minute(),
-                    time_stamp.second(),
-                    time_stamp.millisecond()
-                ));
+                html.push_str(&get_iso_string(&message_with_time_stamp.time_stamp));
                 html.push_str("</span>");
             }
             html.push_str("</div>");

@@ -14,6 +14,7 @@ use crate::{
 };
 
 mod chat_view;
+pub(crate) mod session_search;
 
 #[derive(Deserialize)]
 pub(crate) struct GetSessionParams {
@@ -296,6 +297,7 @@ fn generate_filtering_form(request: &GetSessionParams, conversation: &Conversati
     }
 
     if message_types_in_conversation.contains(&None) {
+        html.push_str("<span>");
         html.push_str("<input type=\"checkbox\" id=\"uncategorized\" name=\"uncategorized\"");
 
         if allow_list.contains(&None) {
@@ -304,6 +306,7 @@ fn generate_filtering_form(request: &GetSessionParams, conversation: &Conversati
         html.push('>');
 
         html.push_str("<label for=\"uncategorized\">uncategorized</label><br/>");
+        html.push_str("</span>");
     }
 
     html.push_str("</fieldset>");
