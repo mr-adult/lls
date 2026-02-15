@@ -169,16 +169,28 @@ pub(crate) fn get_source(
         Message::Notification(notification) => match notification.method.as_str() {
             Cancel::METHOD => serde_json::from_value::<CancelParams>(notification.params.clone())
                 .ok()
-                .map(|cancel_params| {
-                    let request_id = match cancel_params.id {
-                        NumberOrString::Number(num) => RequestId::from(num),
-                        NumberOrString::String(str) => RequestId::from(str),
-                    };
-
-                    containing_conversation.requests.get(&request_id).cloned()
+                .map(|cancel_params| match cancel_params.id {
+                    NumberOrString::Number(num) => containing_conversation
+                        .requests
+                        .get(&RequestId::from(num))
+                        .or_else(|| {
+                            containing_conversation
+                                .requests
+                                .get(&RequestId::from(num.to_string()))
+                        }),
+                    NumberOrString::String(str) => containing_conversation
+                        .requests
+                        .get(&RequestId::from(str.clone()))
+                        .or_else(|| {
+                            str.parse::<i32>()
+                                .ok()
+                                .map(|id| {
+                                    containing_conversation.requests.get(&RequestId::from(id))
+                                })
+                                .flatten()
+                        }),
                 })
                 .flatten()
-                .as_ref()
                 .map(get_request_source)
                 .flatten(),
             Progress::METHOD => {
@@ -306,13 +318,28 @@ pub fn classify(message: &Message, containing_conversation: &Conversation) -> Op
                 Cancel::METHOD => {
                     serde_json::from_value::<CancelParams>(notification.params.clone())
                         .ok()
-                        .map(|cancel_params| {
-                            let request_id = match cancel_params.id {
-                                NumberOrString::Number(num) => RequestId::from(num),
-                                NumberOrString::String(str) => RequestId::from(str),
-                            };
-
-                            containing_conversation.requests.get(&request_id)
+                        .map(|cancel_params| match cancel_params.id {
+                            NumberOrString::Number(num) => containing_conversation
+                                .requests
+                                .get(&RequestId::from(num))
+                                .or_else(|| {
+                                    containing_conversation
+                                        .requests
+                                        .get(&RequestId::from(num.to_string()))
+                                }),
+                            NumberOrString::String(str) => containing_conversation
+                                .requests
+                                .get(&RequestId::from(str.clone()))
+                                .or_else(|| {
+                                    str.parse::<i32>()
+                                        .ok()
+                                        .map(|id| {
+                                            containing_conversation
+                                                .requests
+                                                .get(&RequestId::from(id))
+                                        })
+                                        .flatten()
+                                }),
                         })
                         .flatten()
                         .map(classify_request)
