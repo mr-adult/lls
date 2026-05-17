@@ -1,0 +1,45 @@
+:root {
+    font-size: 18px;
+
+    --bg: #23252B;
+    --panel: #2C313A;
+    --panel-border: #3B4350;
+
+    --client-color: #6B3E4E;
+    --server-color: #2F7C82;
+    --interrupt-color: #46566A;
+
+    --text-primary: #E6EAF0;
+    --text-secondary: #AAB2BF;
+
+    --link-color: #9CDCFE;
+    --link-hover: #C7E6FF;
+
+    --row-hover: rgba(255,255,255,0.03);
+}
+
+html {
+    background:
+        radial-gradient(
+            circle at top left,
+            rgba(107,62,78,0.18),
+            transparent 30%
+        ),
+        radial-gradient(
+            circle at top right,
+            rgba(47,124,130,0.18),
+            transparent 35%
+        ),
+        var(--bg);
+
+    color: var(--text-primary);
+
+    min-height: 100%;
+}
+
+body {
+    margin-right: auto;
+    margin-left: auto;
+    padding: 40px;
+    margin: 0px;
+}

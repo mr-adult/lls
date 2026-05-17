@@ -1,0 +1,74 @@
+#brand_header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+
+    margin-bottom: 32px;
+    
+    font-family:
+        Inter,
+        system-ui,
+        sans-serif;
+}
+
+#brand_logo {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+
+    font-size: 1.8rem;
+    font-weight: 800;
+    letter-spacing: -0.05em;
+
+    color: white;
+}
+
+#brand_logo span {
+    background:
+        linear-gradient(
+            135deg,
+            #FFFFFF 0%,
+            #9CDCFE 45%,
+            #A6E3E9 100%
+        );
+
+    font-family:
+        Inter,
+        system-ui,
+        sans-serif;
+
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.logo_orb {
+    width: 18px;
+    height: 18px;
+
+    border-radius: 50%;
+
+    background:
+        linear-gradient(
+            135deg,
+            var(--client-color),
+            var(--server-color)
+        );
+
+    box-shadow:
+        0 0 20px rgba(47,124,130,0.45),
+        0 0 30px rgba(107,62,78,0.25);
+}
+
+#brand_tagline {
+    color: #8D98A8;
+
+    font-size: 0.9rem;
+    font-weight: 500;
+
+    font-family:
+        Inter,
+        system-ui,
+        sans-serif;
+
+    letter-spacing: 0.02em;
+}

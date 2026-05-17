@@ -1,0 +1,135 @@
+use std::sync::Arc;
+
+use axum::{
+    Router,
+    routing::{any, get},
+};
+use clap::{Arg, command};
+use axum::http::Uri;
+use sqlx::{PgPool, postgres::PgPoolOptions};
+use tokio::net::TcpListener;
+use tracing_subscriber::{
+    EnvFilter,
+    {layer::SubscriberExt, util::SubscriberInitExt},
+};
+
+use crate::error_logging::PostgresLayer;
+
+mod error_logging;
+mod html;
+mod lsp;
+mod message;
+mod session;
+mod utils;
+
+#[derive(Clone)]
+struct AppState {
+    db: PgPool,
+    forward_url: Arc<Uri>,
+}
+
+#[tokio::main]
+pub async fn main() {
+    let matches = command!()
+        .about(
+            "
+  _      _       _____ _____
+ | |    | |     / ____|  __ \\
+ | |    | |    | (___ | |__) |
+ | |    | |     \\___ \\|  ___/
+ | |____| |____ ____) | |
+ |______|______|_____/|_|",
+        )
+        .arg(
+            Arg::new("port")
+                .help("the port to listen for websocket connections on")
+                .long("port"),
+        )
+        .arg(
+            Arg::new("forward_url")
+                .help("the URL of the actual language server - traffic will be forwarded there")
+                .long("forward_url"),
+        )
+        .arg(
+            Arg::new("DATABASE_URL")
+                .help("the URL of the postgres database instance")
+                .long("db"),
+        )
+        .get_matches();
+
+    println!("Starting Up...");
+
+    // First, parse the .env file for our environment setup.
+    dotenvy::dotenv().ok();
+
+    let port = matches
+        .get_one::<String>("port")
+        .map(String::to_string)
+        .unwrap_or_else(|| std::env::var("port").expect("No port was specified."))
+        .parse::<u16>()
+        .expect("Failed to parse port as u16.");
+
+    let forward_url = matches
+        .get_one::<String>("forward_url")
+        .map(String::to_string)
+        .unwrap_or_else(|| std::env::var("forward_url").expect("No forward_url was specified."))
+        .parse::<Uri>()
+        .expect("Failed to parse forward_url as URI");
+
+    let database_url = matches
+        .get_one::<String>("DATABASE_URL")
+        .map(String::to_string)
+        .unwrap_or_else(|| {
+            std::env::var("DATABASE_URL")
+                .expect("DATABASE_URL must be set either via command line argument or .env file.")
+        });
+
+    // We create a single connection pool for SQLx that's shared across the whole application.
+    // This saves us from opening a new connection for every API call, which is wasteful.
+    let pool = PgPoolOptions::new()
+        // The default connection limit for a Postgres server is 100 connections, minus 3 for superusers.
+        // We should leave some connections available for manual access.
+        //
+        // If you're deploying your application with multiple replicas, then the total
+        // across all replicas should not exceed the Postgres connection limit.
+        .max_connections(10)
+        .connect(&database_url)
+        .await
+        .unwrap_or_else(|err| panic!("Could not connect to dabase_url. Error: \n{}", err));
+
+    // Run any SQL migrations to get the DB into the correct state
+    sqlx::migrate!("./migrations")
+        .run(&pool)
+        .await
+        .unwrap_or_else(|err| panic!("Failed to migrate the database. Error: \n{}", err));
+
+    tracing_subscriber::registry()
+        .with(
+            EnvFilter::from_default_env()
+                // this directive prevent sqlx from infinitely logggin its own events.
+                .add_directive("lls".parse().unwrap()),
+        )
+        .with(PostgresLayer::from(pool.clone()))
+        .init();
+
+    let router = Router::new()
+        .route("/", get(html::session_search::get_sessions))
+        .route("/ws", any(lsp::handle_ws))
+        .route("/session", get(html::get_session))
+        // FUTURE: handle regular POST requests. Need to create an API to retrieve a session ID first.
+        // .route("/log", post(handle_log))
+        .with_state(AppState {
+            db: pool,
+            forward_url: Arc::new(forward_url),
+        })
+        .into_make_service();
+
+    let tcp_listener = TcpListener::bind(&format!("[::]:{port}"))
+        .await
+        .expect(&format!("failed to bind to [::]:{port}"));
+    println!("Listening on: [::]:{port}");
+
+    axum::serve(tcp_listener, router)
+        .await
+        .expect("failed to start service");
+}
