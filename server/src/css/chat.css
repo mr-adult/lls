@@ -31,12 +31,6 @@ html {
     background-color: #23252B;
 }
 
-body {
-    margin-right: auto;
-    margin-left: auto;
-    padding: 40px;
-}
-
 #page_layout {
     display: flex;
     flex-direction: column;
