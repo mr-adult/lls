@@ -115,19 +115,23 @@ impl<'session, State> ClientToServerProxy<'session, State> {
 
         let raw_message = AxumWsMessage::Text(raw_message);
 
-        let send_result = async { self.client_sink.lock().await.send(raw_message).await }
-            .await
-            .map_err(|err| {
-                error!("Failed to send an interrupt response back to the client. Error: {err}");
-                err
-            });
+        let send_future = async {
+            async { self.client_sink.lock().await.send(raw_message).await }
+                .await
+                .map_err(|err| {
+                    error!("Failed to send an interrupt response back to the client. Error: {err}");
+                    err
+                })
+        };
 
-        self.session
-            .log_response(response, MessageSource::Proxy, received_time)
-            .await
-            .ok();
+        let log_future = async {
+            self.session
+                .log_response(response, MessageSource::Proxy, received_time)
+                .await
+                .ok();
+        };
 
-        return send_result;
+        tokio::join!(send_future, log_future).0
     }
 
     async fn proxy_notification(
