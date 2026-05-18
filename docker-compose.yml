@@ -1,9 +1,10 @@
 services:
   api:
-    image: adamfortune/lls
+    image: adamfortune/langtap
     environment:
       DATABASE_URL: "postgresql://postgres:${POSTGRES_PASSWORD}@db:5432/postgres"
       port: 8080
+      forward_url: "ws://192.168.1.136:8081"
     build:
       context: .
       dockerfile: Dockerfile
@@ -23,7 +24,7 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - db:/home/adam/Documents/rust-projects/llsp/postgresql/data
+      - db:/var/lib/postgresql
 
 volumes:
   db:

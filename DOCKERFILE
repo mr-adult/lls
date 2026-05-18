@@ -1,5 +1,5 @@
 FROM rust:trixie AS builder
-WORKDIR /usr/src/lls
+WORKDIR /usr/src/langtap
 COPY . .
 RUN cargo install --path ./server
 
@@ -7,6 +7,6 @@ FROM debian:bookworm-slim
 RUN apt-get update -y
 RUN apt-get install -y libssl3
 RUN rm -rf /var/lib/apt/lists/*
-COPY --from=builder /usr/local/cargo/bin/lls /usr/local/bin/lls
+COPY --from=builder /usr/local/cargo/bin/langtap /usr/local/bin/langtap
 EXPOSE 8080
-ENTRYPOINT ["/usr/local/bin/lls"]
+ENTRYPOINT ["/usr/local/bin/langtap"]
