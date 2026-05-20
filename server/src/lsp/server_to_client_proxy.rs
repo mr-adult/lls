@@ -1,8 +1,8 @@
-use std::{io::BufReader, sync::Arc};
+use std::{fmt::Display, io::BufReader, sync::Arc};
 
-use axum::extract::ws::{Message as AxumWsMessage, WebSocket};
+use axum::extract::ws::Message as AxumWsMessage;
 use futures::{
-    SinkExt, StreamExt,
+    Sink, SinkExt, Stream, StreamExt,
     stream::{SplitSink, SplitStream},
 };
 use lsp_types::{
@@ -11,31 +11,66 @@ use lsp_types::{
     request::{Initialize, Request as LspRequest, ShowMessageRequest},
 };
 use time::{Duration, OffsetDateTime};
-use tokio::{
-    net::TcpStream,
-    sync::{Mutex, RwLock},
-};
-use tokio_tungstenite::{
-    MaybeTlsStream, WebSocketStream,
-    tungstenite::{self, Message as TokioWsMessage},
-};
+use tokio::sync::{Mutex, RwLock};
+use tokio_tungstenite::tungstenite::{self, Message as TokioWsMessage};
 use tracing::{error, warn};
 
 use crate::{
-    lsp::{LspSession, Shutdown, Uninitialized},
+    lsp::{LspSession, Uninitialized},
     message::{ErrorCode, Message as LspMessage, MessageKind, Notification, Request, Response},
     session::{ExpectedSender, MessageSource},
 };
 
-pub(super) struct ServerToClientProxy<'session, State> {
-    source: SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>,
-    client_sink: Arc<Mutex<SplitSink<WebSocket, AxumWsMessage>>>,
-    server_sink: Arc<Mutex<SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, TokioWsMessage>>>,
+pub(crate) async fn run_to_exit<'session, ServerStream, ClientStream>(
+    source: SplitStream<ServerStream>,
+    client_sink: Arc<Mutex<SplitSink<ClientStream, AxumWsMessage>>>,
+    server_sink: Arc<Mutex<SplitSink<ServerStream, TokioWsMessage>>>,
+    state: Arc<RwLock<Uninitialized>>,
+    session: &'session LspSession<'session>,
+) where
+    ClientStream: Sink<AxumWsMessage>,
+    ClientStream::Error: Display,
+    ServerStream:
+        Stream<Item = Result<TokioWsMessage, tungstenite::Error>> + Sink<TokioWsMessage> + Unpin,
+    ServerStream::Error: Display,
+{
+    let s_to_c_proxy = ServerToClientProxy::<
+        'session,
+        Arc<RwLock<Uninitialized>>,
+        ServerStream,
+        ClientStream,
+    >::new(source, client_sink, server_sink, state, session);
+
+    match s_to_c_proxy.initialize().await {
+        Ok(initialized) => initialized.run_proxy().await,
+        Err(()) => {}
+    }
+}
+
+pub(super) struct ServerToClientProxy<'session, State, ServerStream, ClientStream>
+where
+    ClientStream: Sink<AxumWsMessage>,
+    ClientStream::Error: Display,
+    ServerStream:
+        Stream<Item = Result<TokioWsMessage, tungstenite::Error>> + Sink<TokioWsMessage> + Unpin,
+    ServerStream::Error: Display,
+{
+    source: SplitStream<ServerStream>,
+    client_sink: Arc<Mutex<SplitSink<ClientStream, AxumWsMessage>>>,
+    server_sink: Arc<Mutex<SplitSink<ServerStream, TokioWsMessage>>>,
     state: State,
     session: &'session LspSession<'session>,
 }
 
-impl<'session, State> ServerToClientProxy<'session, State> {
+impl<'session, State, ServerStream, ClientStream>
+    ServerToClientProxy<'session, State, ServerStream, ClientStream>
+where
+    ClientStream: Sink<AxumWsMessage>,
+    ClientStream::Error: Display,
+    ServerStream:
+        Stream<Item = Result<TokioWsMessage, tungstenite::Error>> + Sink<TokioWsMessage> + Unpin,
+    ServerStream::Error: Display,
+{
     fn parse_message(message: TokioWsMessage) -> Result<Option<LspMessage>, ()> {
         let lsp_message_bytes = match &message {
             TokioWsMessage::Text(utf8_bytes) => utf8_bytes.as_bytes(),
@@ -60,7 +95,7 @@ impl<'session, State> ServerToClientProxy<'session, State> {
         }
     }
 
-    async fn proxy_request(&mut self, request: Request) -> Result<(), axum::Error> {
+    async fn proxy_request(&mut self, request: Request) -> Result<(), ClientStream::Error> {
         let mut raw_message = Vec::new();
         LspMessage::Request(request.clone())
             .write(&mut raw_message)
@@ -80,7 +115,7 @@ impl<'session, State> ServerToClientProxy<'session, State> {
             })
     }
 
-    async fn proxy_response(&mut self, response: Response) -> Result<(), axum::Error> {
+    async fn proxy_response(&mut self, response: Response) -> Result<(), ClientStream::Error> {
         let mut raw_message = Vec::new();
         LspMessage::Response(response.clone())
             .write(&mut raw_message)
@@ -104,7 +139,7 @@ impl<'session, State> ServerToClientProxy<'session, State> {
         &mut self,
         response: Response,
         received_time: OffsetDateTime,
-    ) -> Result<(), tungstenite::Error> {
+    ) -> Result<(), ServerStream::Error> {
         let mut raw_message = Vec::new();
         LspMessage::Response(response.clone())
             .write(&mut raw_message)
@@ -135,7 +170,10 @@ impl<'session, State> ServerToClientProxy<'session, State> {
         tokio::join!(send_future, log_future).0
     }
 
-    async fn proxy_notification(&mut self, notification: Notification) -> Result<(), axum::Error> {
+    async fn proxy_notification(
+        &mut self,
+        notification: Notification,
+    ) -> Result<(), ClientStream::Error> {
         let mut raw_message = Vec::new();
         LspMessage::Notification(notification.clone())
             .write(&mut raw_message)
@@ -169,13 +207,19 @@ impl<'session, State> ServerToClientProxy<'session, State> {
     }
 }
 
-impl<'session> ServerToClientProxy<'session, Arc<RwLock<Uninitialized>>> {
+impl<'session, ServerStream, ClientStream>
+    ServerToClientProxy<'session, Arc<RwLock<Uninitialized>>, ServerStream, ClientStream>
+where
+    ClientStream: Sink<AxumWsMessage>,
+    ClientStream::Error: Display,
+    ServerStream:
+        Stream<Item = Result<TokioWsMessage, tungstenite::Error>> + Sink<TokioWsMessage> + Unpin,
+    ServerStream::Error: Display,
+{
     pub(super) fn new(
-        source: SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>,
-        client_sink: Arc<Mutex<SplitSink<WebSocket, AxumWsMessage>>>,
-        server_sink: Arc<
-            Mutex<SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, TokioWsMessage>>,
-        >,
+        source: SplitStream<ServerStream>,
+        client_sink: Arc<Mutex<SplitSink<ClientStream, AxumWsMessage>>>,
+        server_sink: Arc<Mutex<SplitSink<ServerStream, TokioWsMessage>>>,
         state: Arc<RwLock<Uninitialized>>,
         session: &'session LspSession<'session>,
     ) -> Self {
@@ -190,7 +234,8 @@ impl<'session> ServerToClientProxy<'session, Arc<RwLock<Uninitialized>>> {
 
     pub(super) async fn initialize(
         mut self,
-    ) -> Result<ServerToClientProxy<'session, InitializedState>, ()> {
+    ) -> Result<ServerToClientProxy<'session, InitializedState, ServerStream, ClientStream>, ()>
+    {
         while let Some(client_msg) = self.source.next().await {
             let received_time = OffsetDateTime::now_utc();
 
@@ -389,7 +434,15 @@ impl<'session> ServerToClientProxy<'session, Arc<RwLock<Uninitialized>>> {
     }
 }
 
-impl<'session> ServerToClientProxy<'session, InitializedState> {
+impl<'session, ServerStream, ClientStream>
+    ServerToClientProxy<'session, InitializedState, ServerStream, ClientStream>
+where
+    ClientStream: Sink<AxumWsMessage>,
+    ClientStream::Error: Display,
+    ServerStream:
+        Stream<Item = Result<TokioWsMessage, tungstenite::Error>> + Sink<TokioWsMessage> + Unpin,
+    ServerStream::Error: Display,
+{
     pub(super) async fn run_proxy(mut self) {
         while let Some(protocol_result) = self.get_next_message().await {
             let message_parse_result = match protocol_result {

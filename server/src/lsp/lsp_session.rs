@@ -362,7 +362,11 @@ impl<'db> LspSession<'db> {
                 MessageKind::Notification => None,
             },
             LogMessage::METHOD => Some(ExpectedSender::Server),
-            WorkDoneProgressCreate::METHOD => Some(ExpectedSender::Server),
+            WorkDoneProgressCreate::METHOD => match kind {
+                MessageKind::Request => Some(ExpectedSender::Server),
+                MessageKind::Response => Some(ExpectedSender::Client),
+                MessageKind::Notification => None,
+            },
             WorkDoneProgressCancel::METHOD => Some(ExpectedSender::Client),
             TelemetryEvent::METHOD => Some(ExpectedSender::Server),
             _ => Some(ExpectedSender::Unknown),
@@ -670,7 +674,7 @@ impl<'db> LspSession<'db> {
         }
 
         sqlx::query_scalar::<_, i64>(
-            "INSERT INTO responses (id, session_id, is_error, result, error_code, error_message, error_data, source, time_stamp) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id;"
+            "INSERT INTO responses (request_id, session_id, is_error, result, error_code, error_message, error_data, source, time_stamp) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id;"
             )
             .bind(db_id)
             .bind(self.session_id)

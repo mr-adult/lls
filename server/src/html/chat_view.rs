@@ -1,7 +1,6 @@
 use std::{collections::HashSet, iter::Enumerate, vec::IntoIter};
 
 use crate::message::Message;
-use axum::routing::any;
 use serde_json::{Map, Value};
 
 use crate::{
@@ -12,6 +11,7 @@ use crate::{
 
 pub(crate) fn append_chat_html_to(
     html: &mut String,
+    session_id: i64,
     conversation: &Conversation,
     allow_list: &HashSet<Option<MessageClassification>>,
 ) {
@@ -59,49 +59,90 @@ pub(crate) fn append_chat_html_to(
                     html.push_str("\">");
                     {
                         html.push_str("<summary>");
-                        match &message {
-                            Message::Request(req) => {
-                                html.push_str("Request: ");
-                                html.push_str(&req.method);
-                            }
-                            Message::Response(resp) => {
-                                html.push_str("Response: ");
-                                let method = conversation
-                                    .requests()
-                                    .get(&resp.id)
-                                    .map(|request| &request.method);
-                                if let Some(method) = method {
-                                    html.push_str(method);
-                                } else {
-                                    html.push_str("Unknown Response");
+                        {
+                            match &message {
+                                Message::Request(req) => {
+                                    html.push_str("Request: ");
+                                    html.push_str(&req.method);
+                                }
+                                Message::Response(resp) => {
+                                    html.push_str("Response: ");
+                                    let method = conversation
+                                        .requests()
+                                        .get(&resp.id)
+                                        .map(|request| &request.method);
+                                    if let Some(method) = method {
+                                        html.push_str(method);
+                                    } else {
+                                        html.push_str("Unknown Response");
+                                    }
+                                }
+                                Message::Notification(not) => {
+                                    html.push_str("Notification: ");
+                                    html.push_str(&not.method);
                                 }
                             }
-                            Message::Notification(not) => {
-                                html.push_str("Notification: ");
-                                html.push_str(&not.method);
-                            }
                         }
-
                         html.push_str("</summary>");
-                        {
-                            append_json_html_to(
-                                html,
-                                serde_json::to_value(message.clone()).unwrap(),
-                            );
-                        }
+
+                        append_json_html_to(html, serde_json::to_value(message.clone()).unwrap());
                     }
                     html.push_str("</details>");
                 }
                 html.push_str("</div>");
 
-                html.push_str("<span class=\"timestamp\">");
-                html.push_str(&get_iso_string(&message_with_time_stamp.time_stamp));
-                html.push_str("</span>");
+                html.push_str(r#"<div style="display: flex; flex-direction: column; row-gap: 4px;"#);
+                match source {
+                    MessageSource::Client => html.push_str("margin-left: 50px; text-align: left;"),
+                    MessageSource::Server => {
+                        html.push_str("margin-right: 50px; text-align: right;")
+                    }
+                    MessageSource::Unknown | MessageSource::Proxy => {}
+                }
+                html.push_str(r#"">"#);
+                {
+                    html.push_str(
+                        r#"<div style="display: flex; flex-direction: row; align-items: center; column-gap: 4px; "#,
+                    );
+                    match source {
+                        MessageSource::Client => html.push_str(r#"justify-content: flex-start;"#),
+                        MessageSource::Server => html.push_str(r#"justify-content: flex-end;"#),
+                        MessageSource::Unknown | MessageSource::Proxy => {}
+                    }
+                    html.push_str(r#"">"#);
+                    {
+                        html.push_str(get_replay_svg());
+                        html.push_str(r#"<a style="color: var(--link-color);""#);
+                        html.push_str(r#"href="/replay?session_id="#);
+                        html.push_str(&session_id.to_string());
+                        html.push_str(r#"&termination_message="#);
+                        html.push_str(&message_with_time_stamp.db_id.to_string());
+                        html.push_str(r#"&message_kind="#);
+                        html.push_str(
+                            (message_with_time_stamp.message.kind() as u8)
+                                .to_string()
+                                .as_str(),
+                        );
+                        html.push_str(r#"" title="replay the session up to this message">"#);
+                        html.push_str("replay");
+                        html.push_str("</a>");
+                    }
+                    html.push_str("</div>");
+
+                    html.push_str("<span class=\"timestamp\">");
+                    html.push_str(&get_iso_string(&message_with_time_stamp.time_stamp));
+                    html.push_str("</span>");
+                }
+                html.push_str("</div>");
             }
             html.push_str("</div>");
         }
     }
     html.push_str("</div>");
+}
+
+fn get_replay_svg() -> &'static str {
+    r###"<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 48 48"><g xmlns="http://www.w3.org/2000/svg" transform="scale(2)"><path d="M12 20.75a7.26 7.26 0 0 1-7.25-7.25.75.75 0 0 1 1.5 0A5.75 5.75 0 1 0 12 7.75H9.5a.75.75 0 0 1 0-1.5H12a7.25 7.25 0 0 1 0 14.5" style="fill: rgb(255, 255, 255);"></path><path d="M12 10.75a.74.74 0 0 1-.53-.22l-3-3a.75.75 0 0 1 0-1.06l3-3a.75.75 0 1 1 1.06 1.06L10.06 7l2.47 2.47a.75.75 0 0 1 0 1.06.74.74 0 0 1-.53.22" style="fill: rgb(255, 255, 255);"></path></g></svg>"###
 }
 
 fn append_json_html_to(html: &mut String, value: Value) {
@@ -193,24 +234,33 @@ fn append_json_html_to_internal(html: &mut String, value: Value) {
                 while let Some((i, value)) = values.next() {
                     if i != 0 {
                         html.push(',');
-                        previous = Some(TokenKind::Comma);
-                    }
-
-                    if let Some(TokenKind::ArrayStart | TokenKind::ObjectStart | TokenKind::Comma) =
-                        previous
-                    {
                         html.push_str("<br/>");
                         for _ in 0..indent {
                             html.push_str(indent_str);
                         }
+                        previous = Some(TokenKind::Comma);
                     }
 
                     match value {
                         Value::Null => {
+                            if let Some(TokenKind::ArrayStart | TokenKind::ObjectStart) = previous {
+                                html.push_str("<br/>");
+                                for _ in 0..indent {
+                                    html.push_str(indent_str);
+                                }
+                            }
+
                             html.push_str(null_token);
                             previous = Some(TokenKind::Null);
                         }
                         Value::Bool(value) => {
+                            if let Some(TokenKind::ArrayStart | TokenKind::ObjectStart) = previous {
+                                html.push_str("<br/>");
+                                for _ in 0..indent {
+                                    html.push_str(indent_str);
+                                }
+                            }
+
                             if value {
                                 html.push_str(true_token);
                                 previous = Some(TokenKind::True);
@@ -220,12 +270,26 @@ fn append_json_html_to_internal(html: &mut String, value: Value) {
                             }
                         }
                         Value::Number(number) => {
+                            if let Some(TokenKind::ArrayStart | TokenKind::ObjectStart) = previous {
+                                html.push_str("<br/>");
+                                for _ in 0..indent {
+                                    html.push_str(indent_str);
+                                }
+                            }
+
                             html.push_str(number_open);
                             html.push_str(&number.to_string());
                             html.push_str(number_close);
                             previous = Some(TokenKind::Number);
                         }
                         Value::String(str) => {
+                            if let Some(TokenKind::ArrayStart | TokenKind::ObjectStart) = previous {
+                                html.push_str("<br/>");
+                                for _ in 0..indent {
+                                    html.push_str(indent_str);
+                                }
+                            }
+
                             append_escaped_string(html, &str);
                             previous = Some(TokenKind::String);
                         }
@@ -283,12 +347,12 @@ fn append_json_html_to_internal(html: &mut String, value: Value) {
                 while let Some((i, (key, value))) = key_values.next() {
                     if i != 0 {
                         html.push(',');
-                        previous = Some(TokenKind::Comma);
-                    }
-
-                    if let Some(TokenKind::ArrayStart | TokenKind::ObjectStart | TokenKind::Comma) =
-                        previous
-                    {
+                        html.push_str("<br/>");
+                        for _ in 0..indent {
+                            html.push_str(indent_str);
+                        }
+                        // previous = Some(TokenKind::Comma);
+                    } else if let Some(TokenKind::ArrayStart | TokenKind::ObjectStart) = previous {
                         html.push_str("<br/>");
                         for _ in 0..indent {
                             html.push_str(indent_str);
@@ -368,4 +432,17 @@ fn append_escaped_string(html: &mut String, content: &str) {
     html_escape::encode_text_to_string(content, html);
     html.push('"');
     html.push_str(r#"</span>"#);
+}
+
+#[test]
+fn test() {
+    let mut map = Map::new();
+    map.insert(
+        "test".to_string(),
+        Value::Array(vec![Value::String("test".to_string())]),
+    );
+    let mut html = String::new();
+    let obj = Value::Object(map);
+    append_json_html_to(&mut html, Value::Array(vec![obj]));
+    println!("{}", html);
 }

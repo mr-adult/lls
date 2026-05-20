@@ -11,21 +11,61 @@
     white-space: pre;
 }
 
-.client_message .json-key { color: #9CDCFE; }
-.client_message .json-string { color: #FFDCA8; }
-.client_message .json-number{ color: #B5CEA8; }
-.client_message .json-boolean { color: #FFB3D1; }
-.client_message .json-null { color: #C8B6FF; }
-.client_message .json-brace { color: #F2F4F8; }
-.client_message .json-punctuation { color: #C7CED8; }
+.client_message .json-key {
+    color: #9CDCFE;
+}
 
-.server_message .json-key { color: #FFE082; }
-.server_message .json-string { color: #FFCCBC; }
-.server_message .json-number { color: #E6EE9C; }
-.server_message .json-boolean { color: #F8BBD0; }
-.server_message .json-null { color: #D1C4E9; }
-.server_message .json-brace { color: #F5F7FA; }
-.server_message .json-punctuation { color: #D0D7E2; }
+.client_message .json-string {
+    color: #FFDCA8;
+}
+
+.client_message .json-number {
+    color: #B5CEA8;
+}
+
+.client_message .json-boolean {
+    color: #FFB3D1;
+}
+
+.client_message .json-null {
+    color: #C8B6FF;
+}
+
+.client_message .json-brace {
+    color: #F2F4F8;
+}
+
+.client_message .json-punctuation {
+    color: #C7CED8;
+}
+
+.server_message .json-key {
+    color: #FFE082;
+}
+
+.server_message .json-string {
+    color: #FFCCBC;
+}
+
+.server_message .json-number {
+    color: #E6EE9C;
+}
+
+.server_message .json-boolean {
+    color: #F8BBD0;
+}
+
+.server_message .json-null {
+    color: #D1C4E9;
+}
+
+.server_message .json-brace {
+    color: #F5F7FA;
+}
+
+.server_message .json-punctuation {
+    color: #D0D7E2;
+}
 
 html {
     background-color: #23252B;
@@ -49,7 +89,7 @@ html {
     border: 1px solid #3B4350;
     color: #E6EAF0;
     box-shadow:
-        0 4px 12px rgba(0,0,0,0.25);
+        0 4px 12px rgba(0, 0, 0, 0.25);
 }
 
 /* Desktop layout */
@@ -76,6 +116,7 @@ html {
         flex: 1;
     }
 }
+
 @media (max-width: 999px) {
     #filter_fieldset {
         /* use 3 columns on desktop */
@@ -162,7 +203,9 @@ input[type="checkbox"] {
     align-self: flex-end;
 }
 
-.message,.client_message,.server_message {
+.message,
+.client_message,
+.server_message {
     margin: 5px;
     display: flex;
     flex-direction: row;
@@ -191,14 +234,14 @@ input[type="checkbox"] {
 
 .client_message::before,
 .server_message::after {
-	content: '';
-	position: relative;
-	width: 0;
-	height: 0;
-	right: auto;
+    content: '';
+    position: relative;
+    width: 0;
+    height: 0;
+    right: auto;
     top: 80px;
-	bottom: auto;
-	border: 20px solid;
+    bottom: auto;
+    border: 20px solid;
 }
 
 .client_message::before {

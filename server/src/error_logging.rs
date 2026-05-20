@@ -90,7 +90,7 @@ where
                 }
 
                 if response_id.is_none() {
-                     if let Value::Object(map) = &mut field_data {
+                    if let Value::Object(map) = &mut field_data {
                         response_id = map
                             .get("response_id")
                             .map(|value| get_id_field_from_value(value, "session_id"))
@@ -99,8 +99,8 @@ where
                 }
 
                 if notification_id.is_none() {
-                     if let Value::Object(map) = &mut field_data {
-                        notification_id= map
+                    if let Value::Object(map) = &mut field_data {
+                        notification_id = map
                             .get("notification_id")
                             .map(|value| get_id_field_from_value(value, "session_id"))
                             .flatten()
