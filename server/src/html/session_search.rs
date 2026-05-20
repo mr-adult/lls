@@ -94,12 +94,10 @@ pub(crate) async fn get_sessions(
         order_by,
         request.page.unwrap_or(0) * 100
     ))
-    .map(|row: sqlx::postgres::PgRow| {
-        Session {
-            id: row.get("id"),
-            start_time_stamp: row.get("start_time_stamp"),
-            end_time_stamp: row.get("end_time_stamp"),
-        }
+    .map(|row: sqlx::postgres::PgRow| Session {
+        id: row.get("id"),
+        start_time_stamp: row.get("start_time_stamp"),
+        end_time_stamp: row.get("end_time_stamp"),
     })
     .fetch_all(&state.db)
     .await

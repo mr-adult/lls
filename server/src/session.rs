@@ -6,8 +6,9 @@ use uuid::Uuid;
 
 use crate::message::{Conversation, Message, Notification, Request, RequestId, Response};
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) struct MessageWithTimeStamp {
+    pub(crate) db_id: i64,
     pub(crate) time_stamp: OffsetDateTime,
     pub(crate) message: Message,
     pub(crate) source: MessageSource,
@@ -21,7 +22,7 @@ pub(crate) enum ExpectedSender {
 }
 
 #[repr(i8)]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum MessageSource {
     Unknown = -1,
     Client = 0,
@@ -169,16 +170,19 @@ pub(crate) async fn get_all_messages_for_session_in_chronological_order(
                 .map(|match_| match_.request_id.clone())
                 .unwrap_or_else(|| RequestId::from(Uuid::new_v4().to_string()));
 
+            let response_db_id;
             let response_time_stamp;
             let response;
             let source;
             match response_record {
                 Ok(ok_response) => {
+                    response_db_id = ok_response.id;
                     response_time_stamp = ok_response.time_stamp;
                     response = Response::new_ok(response_id, ok_response.result);
                     source = ok_response.source;
                 }
                 Err(err_response) => {
+                    response_db_id = err_response.id;
                     response_time_stamp = err_response.time_stamp;
                     response = Response::new_err(
                         response_id,
@@ -190,6 +194,7 @@ pub(crate) async fn get_all_messages_for_session_in_chronological_order(
             };
 
             MessageWithTimeStamp {
+                db_id: response_db_id,
                 time_stamp: response_time_stamp,
                 message: Message::Response(response),
                 source: MessageSource::from(source),
@@ -201,6 +206,7 @@ pub(crate) async fn get_all_messages_for_session_in_chronological_order(
         requests
             .into_iter()
             .map(|request_record| MessageWithTimeStamp {
+                db_id: request_record.id,
                 time_stamp: request_record.time_stamp,
                 message: Message::Request(Request::new(
                     RequestId::from(request_record.request_id),
@@ -215,6 +221,7 @@ pub(crate) async fn get_all_messages_for_session_in_chronological_order(
         notifications
             .into_iter()
             .map(|notification| MessageWithTimeStamp {
+                db_id: notification.id,
                 time_stamp: notification.time_stamp,
                 message: Message::Notification(Notification::new(
                     notification.method,

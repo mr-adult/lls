@@ -105,7 +105,8 @@ impl GetSessionParams {
             msg_types_to_include.insert(Some(MessageClassification::TextDocumentSynchronization));
         }
         if show_all || matches!(request.notebook_synchronization, Some(true)) {
-            msg_types_to_include.insert(Some(MessageClassification::NotebookDocumentSynchronization));
+            msg_types_to_include
+                .insert(Some(MessageClassification::NotebookDocumentSynchronization));
         }
         if show_all || matches!(request.workspace_synchronization, Some(true)) {
             msg_types_to_include.insert(Some(MessageClassification::WorkspaceSynchronization));
@@ -257,7 +258,7 @@ pub(crate) async fn get_session(
     {
         html.push_str(&generate_filtering_form(&request, &conversation));
         let allow_list = request.build_message_classification_allow_list();
-        append_chat_html_to(&mut html, &conversation, &allow_list);
+        append_chat_html_to(&mut html, session.id, &conversation, &allow_list);
     }
     html.push_str("</div>");
 

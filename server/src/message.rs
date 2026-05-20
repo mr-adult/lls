@@ -40,9 +40,9 @@ use serde::{Deserialize, Serialize};
 use crate::session::MessageWithTimeStamp;
 
 pub(crate) struct Conversation {
-    messages: Vec<MessageWithTimeStamp>,
-    requests: HashMap<RequestId, Request>,
-    progress_tokens: HashMap<NumberOrString, Request>,
+    pub(crate) messages: Vec<MessageWithTimeStamp>,
+    pub(crate) requests: HashMap<RequestId, Request>,
+    pub(crate) progress_tokens: HashMap<NumberOrString, Request>,
 }
 
 impl Conversation {
@@ -488,12 +488,14 @@ pub enum Message {
     Notification(Notification),
 }
 
-#[repr(u8)]
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub enum MessageKind {
-    Request,
-    Response,
-    Notification,
+impl Message {
+    pub(crate) fn kind(&self) -> MessageKind {
+        match self {
+            Message::Request(_) => MessageKind::Request,
+            Message::Response(_) => MessageKind::Response,
+            Message::Notification(_) => MessageKind::Notification,
+        }
+    }
 }
 
 impl From<Request> for Message {
@@ -511,6 +513,26 @@ impl From<Response> for Message {
 impl From<Notification> for Message {
     fn from(notification: Notification) -> Message {
         Message::Notification(notification)
+    }
+}
+
+#[repr(u8)]
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum MessageKind {
+    Request = 0,
+    Response = 1,
+    Notification = 2,
+}
+
+impl TryFrom<u8> for MessageKind {
+    type Error = ();
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(Self::Request),
+            1 => Ok(Self::Response),
+            2 => Ok(Self::Notification),
+            _ => Err(()),
+        }
     }
 }
 

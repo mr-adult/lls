@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
+use axum::http::Uri;
 use axum::{
     Router,
     routing::{any, get},
 };
 use clap::{Arg, command};
-use axum::http::Uri;
 use sqlx::{PgPool, postgres::PgPoolOptions};
 use tokio::net::TcpListener;
 use tracing_subscriber::{
@@ -19,6 +19,7 @@ mod error_logging;
 mod html;
 mod lsp;
 mod message;
+mod replay_client;
 mod session;
 mod utils;
 
@@ -38,7 +39,7 @@ pub async fn main() {
  | |   / _` | '_ \ / _` || |/ _` | '_ \
  | |__| (_| | | | | (_| || | (_| | |_) |
  |_____\__,_|_| |_|\__, ||_|\__,_| .__/
-                   |___/         |_|"#
+                   |___/         |_|"#,
         )
         .arg(
             Arg::new("port")
@@ -115,6 +116,7 @@ pub async fn main() {
     let router = Router::new()
         .route("/", get(html::session_search::get_sessions))
         .route("/ws", any(lsp::handle_ws))
+        .route("/replay", get(replay_client::handle_replay))
         .route("/session", get(html::get_session))
         // FUTURE: handle regular POST requests. Need to create an API to retrieve a session ID first.
         // .route("/log", post(handle_log))
