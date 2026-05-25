@@ -1,6 +1,7 @@
 services:
   api:
     image: adamfortune/langtap
+    restart: unless-stopped
     environment:
       DATABASE_URL: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}"
       http_port: 61948
