@@ -2,15 +2,17 @@ services:
   api:
     image: adamfortune/langtap
     environment:
-      DATABASE_URL: "postgresql://postgres:${POSTGRES_PASSWORD}@db:5432/postgres"
-      port: 8080
-      forward_url: "ws://192.168.1.136:8081"
+      DATABASE_URL: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}"
+      http_port: 61948
+      ws_port: 54879
+      forward_url: ${forward_url}
     build:
       context: .
       dockerfile: Dockerfile
     ports:
-      - "8080:8080"
-    depends_on: [db]
+      - "61948:61948"
+      - "54879:54879"
+    depends_on: [ db ]
 
   db:
     image: postgres:latest
@@ -18,8 +20,8 @@ services:
     env_file:
       - .env
     environment:
-      POSTGRES_DB: postgres
-      POSTGRES_USER: postgres
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
       - "5432:5432"
