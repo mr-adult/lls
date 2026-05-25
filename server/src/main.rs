@@ -1,3 +1,4 @@
+use std::process::ExitCode;
 use std::sync::Arc;
 
 use axum::http::Uri;
@@ -30,7 +31,7 @@ struct AppState {
 }
 
 #[tokio::main]
-pub async fn main() {
+pub async fn main() -> ExitCode {
     let matches = command!()
         .about(
             r#"
@@ -42,9 +43,14 @@ pub async fn main() {
                    |___/         |_|"#,
         )
         .arg(
-            Arg::new("port")
+            Arg::new("ws_port")
                 .help("the port to listen for websocket connections on")
-                .long("port"),
+                .long("ws_port"),
+        )
+        .arg(
+            Arg::new("http_port")
+                .help("the port to listen for website traffic on")
+                .long("http_port"),
         )
         .arg(
             Arg::new("forward_url")
@@ -63,12 +69,39 @@ pub async fn main() {
     // First, parse the .env file for our environment setup.
     dotenvy::dotenv().ok();
 
-    let port = matches
-        .get_one::<String>("port")
-        .map(String::to_string)
-        .unwrap_or_else(|| std::env::var("port").expect("No port was specified."))
-        .parse::<u16>()
-        .expect("Failed to parse port as u16.");
+    let ws_port = if let Some(ws_port) = matches.get_one::<String>("ws_port") {
+        ws_port.to_string()
+    } else if let Ok(ws_port) = std::env::var("ws_port") {
+        ws_port
+    } else {
+        println!("No ws_port was specified.");
+        return ExitCode::FAILURE;
+    };
+
+    let ws_port = match ws_port.parse::<u16>() {
+        Ok(ws_port) => ws_port,
+        Err(_) => {
+            println!("Failed to parse ws_port as u16.");
+            return ExitCode::FAILURE;
+        }
+    };
+
+    let http_port = if let Some(http_port) = matches.get_one::<String>("http_port") {
+        http_port.to_string()
+    } else if let Ok(http_port) = std::env::var("http_port") {
+        http_port
+    } else {
+        println!("No http_port was specified.");
+        return ExitCode::FAILURE;
+    };
+
+    let http_port = match http_port.parse::<u16>() {
+        Ok(http_port) => http_port,
+        Err(_) => {
+            println!("Failed to parse http_port as u16.");
+            return ExitCode::FAILURE;
+        }
+    };
 
     let forward_url = matches
         .get_one::<String>("forward_url")
@@ -113,25 +146,50 @@ pub async fn main() {
         .with(PostgresLayer::from(pool.clone()))
         .init();
 
-    let router = Router::new()
+    let app_state = AppState {
+        db: pool,
+        forward_url: Arc::new(forward_url),
+    };
+
+    let ws_router = Router::new()
+        .route("/", any(lsp::handle_ws))
+        // FUTURE: handle regular POST requests. Need to create an API to retrieve a session ID first.
+        // .route("/log", post(handle_log))
+        .with_state(app_state.clone())
+        .into_make_service();
+
+    let http_router = Router::new()
         .route("/", get(html::session_search::get_sessions))
-        .route("/ws", any(lsp::handle_ws))
         .route("/replay", get(replay_client::handle_replay))
         .route("/session", get(html::get_session))
         // FUTURE: handle regular POST requests. Need to create an API to retrieve a session ID first.
         // .route("/log", post(handle_log))
-        .with_state(AppState {
-            db: pool,
-            forward_url: Arc::new(forward_url),
-        })
+        .with_state(app_state)
         .into_make_service();
 
-    let tcp_listener = TcpListener::bind(&format!("[::]:{port}"))
-        .await
-        .expect(&format!("failed to bind to [::]:{port}"));
-    println!("Listening on: [::]:{port}");
+    let (ws_listener_result, http_listener_result) = tokio::join! {
+        TcpListener::bind(format!("[::]:{ws_port}")),
+        TcpListener::bind(format!("[::]:{http_port}"))
+    };
 
-    axum::serve(tcp_listener, router)
-        .await
-        .expect("failed to start service");
+    let ws_listener = ws_listener_result.expect(&format!("failed to bind to [::]:{ws_port}"));
+    let http_listener = http_listener_result.expect(&format!("failed to bind to [::]:{ws_port}"));
+
+    println!("Listening for websocket connections on: [::]:{ws_port}");
+    println!("Listening for http connections on: [::]:{http_port}");
+
+    let ws_future = axum::serve(ws_listener, ws_router);
+    let http_future = axum::serve(http_listener, http_router);
+
+    tokio::select! {
+        value = ws_future => {
+            value
+        }
+        value = http_future => {
+            value
+        }
+    }
+    .expect("Failed to start service");
+
+    ExitCode::SUCCESS
 }
