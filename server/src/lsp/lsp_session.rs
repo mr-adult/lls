@@ -287,7 +287,11 @@ impl<'db> LspSession<'db> {
                     MessageKind::Notification => None,
                 }
             }
-            PublishDiagnostics::METHOD => Some(ExpectedSender::Server),
+            PublishDiagnostics::METHOD => match kind {
+                MessageKind::Request => Some(ExpectedSender::Server),
+                MessageKind::Response => Some(ExpectedSender::Client),
+                MessageKind::Notification => None,
+            },
             DocumentDiagnosticRequest::METHOD | WorkspaceDiagnosticRequest::METHOD => match kind {
                 MessageKind::Request => Some(ExpectedSender::Client),
                 MessageKind::Response => Some(ExpectedSender::Server),
