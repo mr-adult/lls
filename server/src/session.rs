@@ -53,6 +53,7 @@ struct RequestRecord {
 
 struct OkResponseRecord {
     id: i64,
+    request_id: i64,
     session_id: i64,
     result: Value,
     time_stamp: OffsetDateTime,
@@ -61,6 +62,7 @@ struct OkResponseRecord {
 
 struct ErrResponseRecord {
     id: i64,
+    request_id: i64,
     session_id: i64,
     error_code: i32,
     error_message: String,
@@ -108,6 +110,7 @@ pub(crate) async fn get_all_messages_for_session_in_chronological_order(
             .bind(session_id)
             .map(|row: sqlx::postgres::PgRow| {
                 let id = row.get("id");
+                let request_id = row.get("request_id");
                 let session_id = row.get("session_id");
                 let time_stamp = row.get("time_stamp");
                 let source = row.get("source");
@@ -115,6 +118,7 @@ pub(crate) async fn get_all_messages_for_session_in_chronological_order(
                 if row.get("is_error") {
                     Err(ErrResponseRecord {
                         id,
+                        request_id,
                         session_id,
                         error_code: row.get("error_code"),
                         error_message: row.get("error_message"),
@@ -125,6 +129,7 @@ pub(crate) async fn get_all_messages_for_session_in_chronological_order(
                 } else {
                     Ok(OkResponseRecord {
                         id,
+                        request_id,
                         session_id,
                         result: row.get("result"),
                         time_stamp,
@@ -162,9 +167,9 @@ pub(crate) async fn get_all_messages_for_session_in_chronological_order(
                 .iter()
                 .find(|request| {
                     request.id
-                        == match &response_record {
-                            Ok(response) => response.id,
-                            Err(response) => response.id,
+                        == *match &response_record {
+                            Ok(response) => &response.request_id,
+                            Err(response) => &response.request_id,
                         }
                 })
                 .map(|match_| match_.request_id.clone())
