@@ -246,22 +246,22 @@ pub(crate) async fn get_session(
     html.push_str("</head>");
 
     html.push_str("<body>");
-    html.push_str("<style>");
-
-    html.push_str(include_str!("../css/general.css"));
-    html.push_str(include_str!("../css/branding.css"));
-    html.push_str(include_str!("../css/chat.css"));
-    html.push_str("</style>");
-
-    html.push_str(include_str!("./branding.html"));
-    html.push_str(r#"<div id="page_layout">"#);
     {
-        html.push_str(&generate_filtering_form(&request, &conversation));
-        let allow_list = request.build_message_classification_allow_list();
-        append_chat_html_to(&mut html, session.id, &conversation, &allow_list);
-    }
-    html.push_str("</div>");
+        html.push_str("<style>");
+        html.push_str(include_str!("../css/general.css"));
+        html.push_str(include_str!("../css/branding.css"));
+        html.push_str(include_str!("../css/chat.css"));
+        html.push_str("</style>");
 
+        html.push_str(include_str!("./branding.html"));
+        html.push_str(r#"<div id="page_layout">"#);
+        {
+            html.push_str(&generate_filtering_form(&request, &conversation));
+            let allow_list = request.build_message_classification_allow_list();
+            append_chat_html_to(&mut html, session.id, &conversation, &allow_list);
+        }
+        html.push_str("</div>");
+    }
     html.push_str("</body>");
     html.push_str("</html>");
 
