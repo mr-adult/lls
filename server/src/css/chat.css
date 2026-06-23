@@ -9,6 +9,7 @@
 
 .json-string {
     white-space: pre;
+    text-wrap: revert;
 }
 
 .client_message .json-key {
